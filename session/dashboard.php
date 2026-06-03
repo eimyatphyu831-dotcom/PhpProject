@@ -11,7 +11,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit;
 }
 
-$username=htmlspecialchars($_SESSION['username']);
+$username = htmlspecialchars($_SESSION['username']);
 
 ?>
 
