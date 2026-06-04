@@ -1,0 +1,9 @@
+CREATE DATABASE IF NOT EXISTS todo_demo;
+
+USE todo_demo;
+
+CREATE TABLE IF NOT EXISTS todos(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    completed TINYINT(1) DEFAULT 0
+);
