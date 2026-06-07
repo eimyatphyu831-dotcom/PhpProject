@@ -110,7 +110,7 @@ if (isset($_GET['edit_id'])) {
                         <a href="crud.php" class="bg-gray-400 text-black px-8 py-2 rounded-sm hover:bg-gray-300 border">Cancel</a>
                     </div>
                 <?php else: ?>
-                    <button type="submit" name="add_user" class="bg-blue-600 text-white rounded-md px-4 py-2 mt-2">+Save to Database</button>
+                    <button type="submit" name="add_user" class="bg-blue-600 text-white rounded-md px-4 py-2 mt-2 hover:bg-blue-500">+Save to Database</button>
                 <?php endif; ?>
             </form>
         </section>
@@ -142,18 +142,19 @@ if (isset($_GET['edit_id'])) {
 
 
 
-                                        <input type="hidden" name="user_id" value="<?php echo $user['id'] ?>">
                                         <div class="flex justify-center gap-4">
+                                            <a href="crud.php?edit_id=<?php echo $user['id'] ?>" class="text-blue-600 flex hover:text-blue-800">
+                                                <img src="../Images/edit.png" alt="Edit" class="w-5 h-5 ">
+                                                Edit
+                                            </a>
                                             <form action="crud.php" method="POST" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                                                <input type="hidden" name="user_id" value="<?php echo $user['id'] ?>">
                                                 <button type="submit" name="delete_user" class="text-red-600 flex hover:text-red-800">
                                                     <img src="../Images/delete.png" alt="Delete" class="w-5 h-5">
                                                     Delete
                                                 </button>
                                             </form>
-                                            <a href="crud.php?edit_id=<?php echo $user['id'] ?>" class="text-blue-600 flex hover:text-blue-800">
-                                                <img src="../Images/edit.png" alt="Edit" class="w-5 h-5 ">
-                                                Edit
-                                                </button>
+                                            
                                         </div>
 
                                     </td>

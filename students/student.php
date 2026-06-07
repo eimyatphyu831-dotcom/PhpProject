@@ -2,7 +2,7 @@
 
 require_once 'config/db.php';
 $allStudents = [];
-$searchQuery=null;
+$searchQuery = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search_student'])) {
     $searchQuery = trim($_GET['search_student']);
@@ -57,20 +57,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// search or show all
+// Pagination setup
+$itemsPerPage = 4;
+$currentPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+
+// Get total count
 $search = $_GET['search'] ?? '';
 if ($search != '') {
-
-    $stmt = $conn->prepare("SELECT * FROM students WHERE name LIKE ? OR email LIKE ? OR course LIKE ? ORDER BY id DESC");
+    $countStmt = $conn->prepare("SELECT COUNT(*) as total FROM students WHERE name LIKE ? OR email LIKE ? OR course LIKE ?");
     $searchTerm = "%$search%";
-    $stmt->bind_param("sss", $searchTerm, $searchTerm, $searchTerm);
+    $countStmt->bind_param("sss", $searchTerm, $searchTerm, $searchTerm);
+    $countStmt->execute();
+    $countResult = $countStmt->get_result();
+    $totalItems = $countResult->fetch_assoc()['total'];
+    $countStmt->close();
+} else {
+    $countResult = $conn->query("SELECT COUNT(*) as total FROM students");
+    $totalItems = $countResult->fetch_assoc()['total'];
+}
+
+// Calculate total pages
+$totalPages = ceil($totalItems / $itemsPerPage);
+$currentPage = min($currentPage, max(1, $totalPages));
+$offset = ($currentPage - 1) * $itemsPerPage;
+
+// Fetch paginated results
+if ($search != '') {
+    $stmt = $conn->prepare("SELECT * FROM students WHERE name LIKE ? OR email LIKE ? OR course LIKE ? ORDER BY id DESC LIMIT ? OFFSET ?");
+    $searchTerm = "%$search%";
+    $stmt->bind_param("sssii", $searchTerm, $searchTerm, $searchTerm, $itemsPerPage, $offset);
     $stmt->execute();
     $result = $stmt->get_result();
 } else {
-
-    $result = $conn->query("SELECT * FROM students ORDER BY id DESC");
+    $stmt = $conn->prepare("SELECT * FROM students ORDER BY id DESC LIMIT ? OFFSET ?");
+    $stmt->bind_param("ii", $itemsPerPage, $offset);
+    $stmt->execute();
+    $result = $stmt->get_result();
 }
 $allStudents = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+
+// Calculate showing range
+$startItem = $totalItems > 0 ? $offset + 1 : 0;
+$endItem = min($offset + $itemsPerPage, $totalItems);
 // $result = $conn->query('SELECT * FROM students ORDER BY id DESC');
 // $allStudents = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 $editStudent = null;
@@ -104,6 +132,54 @@ $showForm = (isset($_GET['add']) && $_GET['add'] === 'true') || $editStudent !==
 
 <body class="min-h-screen bg-slate-100 flex justify-center py-4 px-4">
 
+    <!-- form -->
+    <?php if ($showForm): ?>
+        <section class="w-1/3 pr-5">
+            <form action="student.php" method="POST" class="w-full bg-gray-800 rounded-md shadow-lg p-6 flex flex-col gap-4 text-white">
+                <h1 class="font-bold text-2xl border-b"><?php echo $editStudent ? 'Edit Student' : ' 📝 Add New Student'; ?></h1>
+
+                <?php if ($editStudent): ?>
+                    <input type="hidden" name="student_id" value="<?php echo $editStudent['id']; ?>">
+                <?php endif; ?>
+
+                <div class="flex flex-col">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" value="<?php echo $editStudent ? $editStudent['name'] : ''; ?>" required class="border rounded-md p-1.5 bg-gray-500 border-gray-500">
+                </div>
+                <div class="flex flex-col">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" value="<?php echo $editStudent ? $editStudent['email'] : ''; ?>" required class="border rounded-md p-1.5 bg-gray-500 border-gray-500">
+                </div>
+                <div class="flex flex-col">
+                    <label for="course">Course</label>
+                    <input type="text" id="course" name="course" value="<?php echo $editStudent ? $editStudent['course'] : ''; ?>" required class="border rounded-md p-1.5 bg-gray-500 border-gray-500">
+                </div>
+                <div class="flex flex-col">
+                    <label for="status">Status</label>
+                    <select id="status" name="status" required class="border rounded-md p-1.5 bg-gray-500 border-gray-500">
+                        <option value="Pending" <?php echo ($editStudent && $editStudent['status'] == 'Pending') ? 'selected' : '' ?>>Pending</option>
+                        <option value="Active" <?php echo (!$editStudent || $editStudent['status'] == 'Pending') ? 'selected' : '' ?>>Active</option>
+                        <option value="Inactive" <?php echo ($editStudent && $editStudent['status'] == 'Inactive') ? 'selected' : '' ?>>Inactive</option>
+                    </select>
+                </div>
+
+                <?php if ($editStudent): ?>
+                    <div class="flex gap-2 justify-center mt-2">
+                        <button type="submit" name="update_student" class="bg-green-700 text-white  px-8 py-2 rounded-sm hover:bg-green-500">Update</button>
+                        <a href="student.php" class="bg-gray-400 text-black px-8 py-2 rounded-sm hover:bg-gray-300 border">Cancel</a>
+                    </div>
+                <?php else: ?>
+                    <button type="submit" name="add_student" class="bg-gradient-to-r from-purple-500 to-blue-400 text-white rounded-md px-4 py-2 mt-2">➕  Add Student</button>
+                <?php endif; ?>
+
+
+            </form>
+        </section>
+        </div>
+    <?php else: ?>
+        </div>
+    <?php endif; ?>
+
     <div class="bg-gray-700 w-2/3 p-4 rounded-lg">
 
         <div class="flex justify-between">
@@ -115,13 +191,8 @@ $showForm = (isset($_GET['add']) && $_GET['add'] === 'true') || $editStudent !==
             <form action="student.php" method="GET">
                 <!-- search -->
                 <div class="flex gap-3 items-center">
-                    <form method="GET">
-                        <input
-                            type="text"
-                            name="search"
-                            placeholder="🔍 Search Students..."
-                            value="<?= $_GET['search'] ?? '' ?>"
-                            class="rounded-lg shadow-lg p-3 bg-black text-white">
+                    <form action="student.php" method="GET">
+                        <input type="text" name="search" placeholder="🔍 Search Students..." value="<?= $_GET['search'] ?? '' ?>" class="rounded-lg shadow-lg p-3 bg-black text-white">
                     </form>
                     <!-- <input type="text" name="search_student" id="" value="<?php echo htmlspecialchars($searchQuery); ?>" class="min-w-0 flex-1 border rounded-lg bg-black text-white px-3 py-2 border-black" placeholder="🔍 Search students..." required> -->
                     <!-- <button type="submit" class="bg-blue-600 text-white rounded-lg px-4 py-2 font-bold hover:bg-blue-700">Search</button> -->
@@ -173,15 +244,15 @@ $showForm = (isset($_GET['add']) && $_GET['add'] === 'true') || $editStudent !==
 
             <tfoot>
                 <tr>
-                    <td colspan="3" class="text-gray-500 p-4">Showing 1-4 of 12</td>
+                    <td colspan="3" class="text-gray-500 p-4">Showing <?= $startItem ?>-<?= $endItem ?> of <?= $totalItems ?></td>
                     <td colspan="2" class="p-4">
                         <div class="flex justify-end gap-2">
-                            <?php $currentPage = isset($_GET['page']) ? (int)$_GET['page'] : 1; ?>
-                            <a href="?page=<?= max(1, $currentPage - 1) ?>" class="rounded-md shadow-md border border-gray-500 px-2"><</a>
-                            <a href="?page=1" class="rounded-md shadow-md border px-2 <?= $currentPage == 1 ? 'bg-blue-600 text-white' : 'border-gray-500' ?>">1</a>
-                            <a href="?page=2" class="rounded-md shadow-md border px-2 <?= $currentPage == 2 ? 'bg-blue-600 text-white' : 'border-gray-500' ?>">2</a>
-                            <a href="?page=3" class="rounded-md shadow-md border px-2 <?= $currentPage == 3 ? 'bg-blue-600 text-white' : 'border-gray-500' ?>">3</a>
-                            <a href="?page=<?= min(3, $currentPage + 1) ?>" class="rounded-md shadow-md border border-gray-500 px-2">></a>
+                            <a href="?page=<?= max(1, $currentPage - 1) ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="rounded-md shadow-md border border-gray-500 px-2 <?= $currentPage == 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">
+                                <</a>
+                                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                        <a href="?page=<?= $i ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="rounded-md shadow-md border px-2 <?= $currentPage == $i ? 'bg-purple-600 text-white' : 'border-gray-500' ?>"><?= $i ?></a>
+                                    <?php endfor; ?>
+                                    <a href="?page=<?= min($totalPages, $currentPage + 1) ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="rounded-md shadow-md border border-gray-500 px-2 <?= $currentPage == $totalPages ? 'opacity-50 cursor-not-allowed' : '' ?>">></a>
                         </div>
                     </td>
                 </tr>
@@ -189,53 +260,7 @@ $showForm = (isset($_GET['add']) && $_GET['add'] === 'true') || $editStudent !==
         </table>
 
     </div>
-    <!-- form -->
-    <?php if ($showForm): ?>
-        <section class="w-1/3 pl-5">
-            <form action="student.php" method="POST" class="w-full bg-gray-300 rounded-md shadow-lg p-6 flex flex-col gap-4">
-                <h1 class="font-bold text-2xl border-b"><?php echo $editStudent ? 'Edit Student' : 'Add New Student'; ?></h1>
-
-                <?php if ($editStudent): ?>
-                    <input type="hidden" name="student_id" value="<?php echo $editStudent['id']; ?>">
-                <?php endif; ?>
-
-                <div class="flex flex-col">
-                    <label for="name">Name</label>
-                    <input type="text" id="name" name="name" value="<?php echo $editStudent ? $editStudent['name'] : ''; ?>" required class="border rounded-md p-1.5">
-                </div>
-                <div class="flex flex-col">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" value="<?php echo $editStudent ? $editStudent['email'] : ''; ?>" required class="border rounded-md p-1.5">
-                </div>
-                <div class="flex flex-col">
-                    <label for="course">Course</label>
-                    <input type="text" id="course" name="course" value="<?php echo $editStudent ? $editStudent['course'] : ''; ?>" required class="border rounded-md p-1.5">
-                </div>
-                <div class="flex flex-col">
-                    <label for="status">Status</label>
-                    <select id="status" name="status" required class="border rounded-md p-1.5">
-                        <option value="Active" <?php echo ($editStudent && $editStudent['status'] == 'Active') ? 'selected' : '' ?>>Active</option>
-                        <option value="Pending" <?php echo (!$editStudent || $editStudent['status'] == 'Pending') ? 'selected' : '' ?>>Pending</option>
-                        <option value="Inactive" <?php echo ($editStudent && $editStudent['status'] == 'Inactive') ? 'selected' : '' ?>>Inactive</option>
-                    </select>
-                </div>
-
-                <?php if ($editStudent): ?>
-                    <div class="flex gap-2 justify-center mt-2">
-                        <button type="submit" name="update_student" class="bg-green-700 text-white  px-8 py-2 rounded-sm hover:bg-green-500">Update</button>
-                        <a href="student.php" class="bg-gray-400 text-black px-8 py-2 rounded-sm hover:bg-gray-300 border">Cancel</a>
-                    </div>
-                <?php else: ?>
-                    <button type="submit" name="add_student" class="bg-blue-600 text-white rounded-md px-4 py-2 mt-2">+Save to Database</button>
-                <?php endif; ?>
-
-
-            </form>
-        </section>
-        </div>
-    <?php else: ?>
-        </div>
-    <?php endif; ?>
+    
 
 
 </body>
